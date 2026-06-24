@@ -1,0 +1,45 @@
+---
+description: Use C# and ASP.NET Core 8 for all backend work
+alwaysApply: true
+---
+
+# Backend Stack — C# / ASP.NET Core 8
+
+Always implement the backend with **C#** and **ASP.NET Core 8** (.NET 8). Do not use Node.js, TypeScript, Python, or other runtimes for server-side code in this project.
+
+## Defaults
+
+- Target framework: `net8.0`
+- Web API: ASP.NET Core Minimal APIs or controllers (match existing project structure)
+- Place backend code under `src/` (e.g. `src/OrderOps.Api/` or similar)
+- Use built-in DI, `IHostApplicationBuilder` / `WebApplication`, and standard middleware
+- Prefer EF Core 8 for PostgreSQL data access when a database layer is needed
+
+## When implementing features
+
+- REST endpoints: ASP.NET Core Web API with proper HTTP status codes and JSON serialization
+- Background/async work: `IHostedService`, `BackgroundService`, or Redis-backed queues as appropriate
+- Real-time (WebSocket/SSE): ASP.NET Core SignalR or native SSE endpoints
+- Validation: Data annotations, FluentValidation, or `IValidatableObject` — not ad-hoc checks in controllers only
+
+## Examples
+
+```csharp
+// ✅ GOOD — ASP.NET Core 8 Web API project
+// OrderOps.Api.csproj: <TargetFramework>net8.0</TargetFramework>
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddControllers();
+var app = builder.Build();
+app.MapControllers();
+app.Run();
+```
+
+```csharp
+// ❌ BAD — Node/Express or other non-.NET backend
+// app.get('/api/orders', ...)
+```
+
+## Out of scope for this rule
+
+Frontend remains **React + TypeScript** unless the user explicitly requests otherwise.
