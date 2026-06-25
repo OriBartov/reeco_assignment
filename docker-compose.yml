@@ -27,5 +27,25 @@ services:
       timeout: 3s
       retries: 5
 
+  api:
+    build:
+      context: .
+      dockerfile: src/OrderOps.Api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      ASPNETCORE_URLS: http://+:3000
+      ASPNETCORE_ENVIRONMENT: Docker
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=order_ops;Username=postgres;Password=postgres
+      Import__DataPath: /app/data
+      Import__RunOnStartup: "true"
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
