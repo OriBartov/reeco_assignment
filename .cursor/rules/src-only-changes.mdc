@@ -1,0 +1,40 @@
+---
+description: Restrict all code changes to the src/ folder only
+alwaysApply: true
+---
+
+# Source-Only Changes
+
+All file changes in this project must stay under **`src/`**.
+
+## Allowed
+
+- Create, edit, or delete files under `src/` (e.g. `src/OrderOps.Api/`, `src/OrderOps.Infrastructure/`)
+
+## Forbidden
+
+Do **not** create, edit, or delete files outside `src/`, including:
+
+- `tests/`
+- `data/`
+- Root files (`README.md`, `docker-compose.yml`, `.gitignore`, `.env.example`, etc.)
+- `.cursor/` (rules, skills, hooks)
+- Build output (`bin/`, `obj/`)
+
+## When the user explicitly asks
+
+If the user clearly requests a change outside `src/` (e.g. "update docker-compose" or "add a Cursor rule"), follow that request. Otherwise, keep all work inside `src/`.
+
+## Examples
+
+```
+✅ src/OrderOps.Api/Controllers/OrdersController.cs
+✅ src/OrderOps.Infrastructure/Services/OrderService.cs
+
+❌ tests/basic-crud.test.ts
+❌ docker-compose.yml
+❌ README.md
+❌ data/products.csv
+```
+
+If a task would require touching files outside `src/`, explain what is needed and ask the user before proceeding.
