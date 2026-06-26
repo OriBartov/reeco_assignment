@@ -227,8 +227,8 @@ public sealed class OrderService(AppDbContext db) : IOrderService
             "warehouse" => descending
                 ? query.OrderByDescending(o => o.Warehouse)
                 : query.OrderBy(o => o.Warehouse),
-            null or "" => query.OrderBy(o => o.Id),
-            _ => query.OrderBy(o => o.Id),
+            null or "" => query.OrderBy(o => o.CreatedAt).ThenBy(o => o.Id),
+            _ => query.OrderBy(o => o.CreatedAt).ThenBy(o => o.Id),
         };
     }
 
