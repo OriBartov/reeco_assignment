@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OrderOps.Infrastructure.Common;
 using OrderOps.Infrastructure.Data;
+using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Exceptions;
 
 namespace OrderOps.Infrastructure.Services;
