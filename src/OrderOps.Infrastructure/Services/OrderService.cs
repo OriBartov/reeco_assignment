@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using OrderOps.Infrastructure.Caching;
 using OrderOps.Infrastructure.Common;
 using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Data;
@@ -8,7 +9,7 @@ using OrderOps.Infrastructure.Exceptions;
 
 namespace OrderOps.Infrastructure.Services;
 
-public sealed class OrderService(AppDbContext db) : IOrderService
+public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrderService
 {
     public async Task<PagedResult<OrderListItemDto>> ListAsync(
         OrderListQuery query,
@@ -156,6 +157,13 @@ public sealed class OrderService(AppDbContext db) : IOrderService
 
             throw new ConflictException("The order was modified by another request. Please retry.");
         }
+
+        if (!string.Equals(newStatus, order.Status, StringComparison.Ordinal))
+        {
+            await statsCache.InvalidateStatsAsync(cancellationToken);
+        }
+
+        await statsCache.InvalidateSupplierPerformanceAsync(order.SupplierId, cancellationToken);
 
         return await GetByIdAsync(id, cancellationToken);
     }

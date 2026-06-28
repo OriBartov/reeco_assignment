@@ -16,7 +16,7 @@ builder.WebHost.UseUrls(builder.Configuration["ASPNETCORE_URLS"] ?? "http://loca
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("Connection string 'Default' is not configured.");
 
-builder.Services.AddOrderOpsInfrastructure(connectionString);
+builder.Services.AddOrderOpsInfrastructure(builder.Configuration, connectionString);
 builder.Services.Configure<ImportOptions>(builder.Configuration.GetSection(ImportOptions.SectionName));
 
 builder.Services.AddControllers(options =>
