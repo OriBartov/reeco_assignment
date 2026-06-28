@@ -7,8 +7,17 @@ namespace OrderOps.Api.Controllers;
 
 [ApiController]
 [Route("api/orders")]
-public sealed class OrdersController(IOrderService orderService) : ControllerBase
+public sealed class OrdersController(
+    IOrderService orderService,
+    IStatsService statsService) : ControllerBase
 {
+    [HttpGet("stats")]
+    public async Task<ActionResult<OrderStatsDto>> GetStats(CancellationToken cancellationToken = default)
+    {
+        var stats = await statsService.GetOrderStatsAsync(cancellationToken);
+        return Ok(stats);
+    }
+
     [HttpGet]
     public async Task<ActionResult<PagedResponse<OrderListItemDto>>> List(
         [FromQuery] OrderListQuery query,
