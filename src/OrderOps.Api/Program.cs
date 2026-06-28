@@ -42,6 +42,22 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
+
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("Frontend", policy =>
+        {
+            policy.WithOrigins(corsOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+    });
+}
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -60,6 +76,11 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+if (corsOrigins.Length > 0)
+{
+    app.UseCors("Frontend");
+}
 
 if (app.Environment.IsDevelopment() ||
     app.Environment.EnvironmentName.Equals("Docker", StringComparison.OrdinalIgnoreCase))
