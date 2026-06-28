@@ -1,10 +1,16 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useMatch } from 'react-router-dom';
+import { useEventStream } from '../../hooks/useEventStream';
 import styles from './AppLayout.module.css';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink;
 
 export function AppLayout() {
+  const supplierMatch = useMatch('/suppliers/:id');
+  const supplierId = supplierMatch?.params.id;
+
+  useEventStream({ supplierId });
+
   return (
     <div className={styles.layout}>
       <header className={styles.header}>

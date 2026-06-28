@@ -2,10 +2,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
-using OrderOps.Api.Controllers;
 using OrderOps.Api.Json;
 using OrderOps.Api.Middleware;
 using OrderOps.Api.ModelBinding;
+using OrderOps.Api.Models;
 using OrderOps.Infrastructure;
 using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Import;
@@ -87,11 +87,6 @@ app.UseMiddleware<NotFoundMiddleware>();
 
 app.MapControllers();
 
-app.MapFallbackToController(
-    nameof(FallbackController.UnknownApiRoute),
-    "Fallback",
-    "api/{**catchAll}");
-
 app.MapGet("/health", () => Results.Json(new { status = "ok" }, new JsonSerializerOptions
 {
     PropertyNamingPolicy = SnakeCaseNamingPolicy.Instance
@@ -100,10 +95,29 @@ app.MapGet("/health", () => Results.Json(new { status = "ok" }, new JsonSerializ
     .WithTags("Health")
     .WithOpenApi();
 
-if (spaEnabled)
+app.MapFallback(async (HttpContext context) =>
 {
-    app.MapFallbackToFile("index.html");
-}
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        context.Response.ContentType = "application/json";
+        var payload = new ErrorResponse("Not found.", "NOT_FOUND");
+        await context.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = SnakeCaseNamingPolicy.Instance
+        }));
+        return;
+    }
+
+    if (spaEnabled && HttpMethods.IsGet(context.Request.Method))
+    {
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(Path.Combine(webRoot, "index.html"));
+        return;
+    }
+
+    context.Response.StatusCode = StatusCodes.Status404NotFound;
+});
 
 app.Run();
 

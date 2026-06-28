@@ -6,11 +6,14 @@ using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Data.Entities;
 using OrderOps.Infrastructure.Exceptions;
+using OrderOps.Infrastructure.Realtime;
 
 namespace OrderOps.Infrastructure.Services;
 
-public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrderService
-{
+public sealed class OrderService(
+    AppDbContext db,
+    IStatsCache statsCache,
+    IEventPublisher eventPublisher) : IOrderService{
     public async Task<PagedResult<OrderListItemDto>> ListAsync(
         OrderListQuery query,
         CancellationToken cancellationToken = default)
@@ -114,7 +117,6 @@ public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrd
         }
 
         var order = await db.Orders
-            .AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
 
         if (order is null)
@@ -127,30 +129,34 @@ public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrd
             throw new ConflictException("Cannot update an order that is already cancelled.");
         }
 
-        var expectedVersion = order.Version;
-        var newStatus = request.Status ?? order.Status;
-        var newPriority = request.Priority ?? order.Priority;
-        var updatedAt = DateTime.UtcNow;
+        var oldStatus = order.Status;
 
-        var rowsAffected = await db.Orders
-            .Where(o => o.Id == id && o.Version == expectedVersion && o.Status != OrderStatuses.Cancelled)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(o => o.Status, newStatus)
-                    .SetProperty(o => o.Priority, newPriority)
-                    .SetProperty(o => o.UpdatedAt, updatedAt)
-                    .SetProperty(o => o.Version, expectedVersion + 1),
-                cancellationToken);
-
-        if (rowsAffected == 0)
+        if (request.Status is not null)
         {
-            var current = await db.Orders
+            order.Status = request.Status;
+        }
+
+        if (request.Priority is not null)
+        {
+            order.Priority = request.Priority;
+        }
+
+        order.UpdatedAt = DateTime.UtcNow;
+        order.Version++;
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            var currentStatus = await db.Orders
                 .AsNoTracking()
                 .Where(o => o.Id == id)
                 .Select(o => o.Status)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (current == OrderStatuses.Cancelled)
+            if (currentStatus == OrderStatuses.Cancelled)
             {
                 throw new ConflictException("Cannot update an order that is already cancelled.");
             }
@@ -158,15 +164,20 @@ public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrd
             throw new ConflictException("The order was modified by another request. Please retry.");
         }
 
-        if (!string.Equals(newStatus, order.Status, StringComparison.Ordinal))
+        if (!string.Equals(order.Status, oldStatus, StringComparison.Ordinal))
         {
             await statsCache.InvalidateStatsAsync(cancellationToken);
+            eventPublisher.PublishOrderUpdated(
+                order.Id,
+                order.SupplierId,
+                oldStatus,
+                order.Status,
+                order.UpdatedAt);
         }
 
         await statsCache.InvalidateSupplierPerformanceAsync(order.SupplierId, cancellationToken);
 
-        return await GetByIdAsync(id, cancellationToken);
-    }
+        return await GetByIdAsync(id, cancellationToken);    }
 
     private static Expression<Func<Order, OrderListItemDto>> ListItemProjection(bool includeProductName) =>
         includeProductName ? ListItemWithProductName : ListItemWithoutProductName;

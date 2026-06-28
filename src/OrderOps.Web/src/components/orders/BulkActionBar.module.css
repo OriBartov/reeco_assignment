@@ -1,0 +1,81 @@
+.bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1.5rem;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  box-shadow: 0 -4px 12px rgb(15 23 42 / 8%);
+}
+
+.summary {
+  color: var(--color-heading);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.actionButton {
+  height: 2.25rem;
+  padding: 0 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.actionButton:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+.actionButtonPrimary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.actionButtonPrimary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.actionButtonDanger {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.clearButton {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.clearButton:hover {
+  color: var(--color-heading);
+}
+
+@media (max-width: 640px) {
+  .bar {
+    padding: 0.75rem 1rem;
+  }
+}
