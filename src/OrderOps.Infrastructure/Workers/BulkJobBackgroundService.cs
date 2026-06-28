@@ -6,6 +6,7 @@ using OrderOps.Infrastructure.Bulk;
 using OrderOps.Infrastructure.Caching;
 using OrderOps.Infrastructure.Common;
 using OrderOps.Infrastructure.Data;
+using OrderOps.Infrastructure.Realtime;
 
 namespace OrderOps.Infrastructure.Workers;
 
@@ -13,6 +14,7 @@ public sealed class BulkJobBackgroundService(
     IBulkJobQueue queue,
     IBulkOrderLockService orderLockService,
     IServiceScopeFactory scopeFactory,
+    IEventPublisher eventPublisher,
     ILogger<BulkJobBackgroundService> logger) : BackgroundService
 {
     private const int BatchSize = 100;
@@ -76,6 +78,8 @@ public sealed class BulkJobBackgroundService(
         }
 
         await FinalizeJobAsync(message.JobId, completed, failed, cancellationToken);
+
+        await eventPublisher.PublishBulkCompletedAsync(message.JobId, cancellationToken);
 
         logger.LogInformation(
             "Bulk job {JobId} finished: action={Action}, completed={Completed}, failed={Failed}",

@@ -55,4 +55,4 @@ public sealed record OrderDetailDto(
     string SupplierName,
     string ProductName);
 
-public sealed record UpdateOrderRequest(string? Status, string? Priority);
+public sealed record UpdateOrderRequest(string? Status, string? Priority, string? Notes);

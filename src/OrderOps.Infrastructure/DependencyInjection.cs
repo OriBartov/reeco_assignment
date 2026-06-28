@@ -6,6 +6,7 @@ using OrderOps.Infrastructure.Caching;
 using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Import;
 using OrderOps.Infrastructure.Services;
+using OrderOps.Infrastructure.Realtime;
 using OrderOps.Infrastructure.Workers;
 using StackExchange.Redis;
 
@@ -28,12 +29,17 @@ public static class DependencyInjection
                 options.Configuration = redisConnection;
             });
             services.AddSingleton<IBulkOrderLockService, RedisBulkOrderLockService>();
+            services.AddSingleton<IEventPublisher, RedisEventPublisher>();
+            services.AddHostedService<RedisEventSubscriberService>();
         }
         else
         {
             services.AddDistributedMemoryCache();
             services.AddSingleton<IBulkOrderLockService, InMemoryBulkOrderLockService>();
+            services.AddSingleton<IEventPublisher, InMemoryEventPublisher>();
         }
+
+        services.AddSingleton<EventStreamRegistry>();
 
         services.AddSingleton<IStatsCache, StatsCache>();
 

@@ -6,10 +6,11 @@ using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Data.Entities;
 using OrderOps.Infrastructure.Exceptions;
+using OrderOps.Infrastructure.Realtime;
 
 namespace OrderOps.Infrastructure.Services;
 
-public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrderService
+public sealed class OrderService(AppDbContext db, IStatsCache statsCache, IEventPublisher eventPublisher) : IOrderService
 {
     public async Task<PagedResult<OrderListItemDto>> ListAsync(
         OrderListQuery query,
@@ -128,19 +129,38 @@ public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrd
         }
 
         var expectedVersion = order.Version;
+        var oldStatus = order.Status;
         var newStatus = request.Status ?? order.Status;
         var newPriority = request.Priority ?? order.Priority;
         var updatedAt = DateTime.UtcNow;
 
-        var rowsAffected = await db.Orders
-            .Where(o => o.Id == id && o.Version == expectedVersion && o.Status != OrderStatuses.Cancelled)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(o => o.Status, newStatus)
-                    .SetProperty(o => o.Priority, newPriority)
-                    .SetProperty(o => o.UpdatedAt, updatedAt)
-                    .SetProperty(o => o.Version, expectedVersion + 1),
-                cancellationToken);
+        int rowsAffected;
+
+        if (request.Notes is not null)
+        {
+            rowsAffected = await db.Orders
+                .Where(o => o.Id == id && o.Version == expectedVersion && o.Status != OrderStatuses.Cancelled)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(o => o.Status, newStatus)
+                        .SetProperty(o => o.Priority, newPriority)
+                        .SetProperty(o => o.Notes, request.Notes)
+                        .SetProperty(o => o.UpdatedAt, updatedAt)
+                        .SetProperty(o => o.Version, expectedVersion + 1),
+                    cancellationToken);
+        }
+        else
+        {
+            rowsAffected = await db.Orders
+                .Where(o => o.Id == id && o.Version == expectedVersion && o.Status != OrderStatuses.Cancelled)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(o => o.Status, newStatus)
+                        .SetProperty(o => o.Priority, newPriority)
+                        .SetProperty(o => o.UpdatedAt, updatedAt)
+                        .SetProperty(o => o.Version, expectedVersion + 1),
+                    cancellationToken);
+        }
 
         if (rowsAffected == 0)
         {
@@ -164,6 +184,17 @@ public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrd
         }
 
         await statsCache.InvalidateSupplierPerformanceAsync(order.SupplierId, cancellationToken);
+
+        if (!string.Equals(newStatus, oldStatus, StringComparison.Ordinal))
+        {
+            await eventPublisher.PublishOrderUpdatedAsync(
+                id,
+                order.SupplierId,
+                oldStatus,
+                newStatus,
+                updatedAt,
+                cancellationToken);
+        }
 
         return await GetByIdAsync(id, cancellationToken);
     }

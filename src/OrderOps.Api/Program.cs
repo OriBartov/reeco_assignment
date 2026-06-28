@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using OrderOps.Api.Controllers;
+using OrderOps.Api.Endpoints;
 using OrderOps.Api.Json;
 using OrderOps.Api.Middleware;
 using OrderOps.Api.ModelBinding;
@@ -74,6 +75,7 @@ if (app.Environment.IsDevelopment() ||
 app.UseMiddleware<NotFoundMiddleware>();
 
 app.MapControllers();
+app.MapEventsEndpoint();
 
 app.MapFallbackToController(
     nameof(FallbackController.UnknownApiRoute),
