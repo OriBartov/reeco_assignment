@@ -21,7 +21,7 @@ public sealed class NotFoundMiddleware(RequestDelegate next)
         }
 
         if (context.Response.StatusCode == StatusCodes.Status404NotFound &&
-            !context.Response.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true)
+            context.Response.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) != true)
         {
             context.Response.ContentType = "application/json";
             var payload = new ErrorResponse("Not found.", "NOT_FOUND");

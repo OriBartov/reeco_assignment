@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using OrderOps.Api.Controllers;
 using OrderOps.Api.Json;
 using OrderOps.Api.Middleware;
 using OrderOps.Api.ModelBinding;
@@ -73,6 +74,11 @@ if (app.Environment.IsDevelopment() ||
 app.UseMiddleware<NotFoundMiddleware>();
 
 app.MapControllers();
+
+app.MapFallbackToController(
+    nameof(FallbackController.UnknownApiRoute),
+    "Fallback",
+    "api/{**catchAll}");
 
 app.MapGet("/health", () => Results.Json(new { status = "ok" }, new JsonSerializerOptions
 {
