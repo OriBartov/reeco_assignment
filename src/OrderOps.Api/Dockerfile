@@ -1,3 +1,12 @@
+FROM node:22-alpine AS frontend
+WORKDIR /frontend
+
+COPY src/OrderOps.Web/package.json src/OrderOps.Web/package-lock.json ./
+RUN npm ci
+
+COPY src/OrderOps.Web/ ./
+RUN npm run build
+
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
@@ -10,6 +19,7 @@ RUN dotnet restore OrderOps.Api/OrderOps.Api.csproj
 
 COPY src/OrderOps.Api/ OrderOps.Api/
 COPY src/OrderOps.Infrastructure/ OrderOps.Infrastructure/
+COPY --from=frontend /frontend/dist OrderOps.Api/wwwroot/
 COPY data/ /app/data/
 
 RUN dotnet publish OrderOps.Api/OrderOps.Api.csproj -c Release -o /app/publish

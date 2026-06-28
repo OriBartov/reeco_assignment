@@ -60,15 +60,27 @@ using (var scope = app.Services.CreateScope())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-if (app.Environment.IsDevelopment() ||
-    app.Environment.EnvironmentName.Equals("Docker", StringComparison.OrdinalIgnoreCase))
+var webRoot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+var spaEnabled = File.Exists(Path.Combine(webRoot, "index.html"));
+
+var exposeSwagger = app.Environment.IsDevelopment() ||
+    app.Environment.EnvironmentName.Equals("Docker", StringComparison.OrdinalIgnoreCase);
+
+if (exposeSwagger)
 {
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
-        options.RoutePrefix = string.Empty;
+        // Root serves the SPA when wwwroot is populated (Docker image with frontend build).
+        options.RoutePrefix = spaEnabled ? "swagger" : string.Empty;
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "OrderOps API v1");
     });
+}
+
+if (spaEnabled)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
 }
 
 app.UseMiddleware<NotFoundMiddleware>();
@@ -87,6 +99,11 @@ app.MapGet("/health", () => Results.Json(new { status = "ok" }, new JsonSerializ
     .WithName("GetHealth")
     .WithTags("Health")
     .WithOpenApi();
+
+if (spaEnabled)
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 
