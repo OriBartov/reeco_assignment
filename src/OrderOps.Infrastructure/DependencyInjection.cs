@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OrderOps.Infrastructure.Bulk;
 using OrderOps.Infrastructure.Caching;
 using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Import;
 using OrderOps.Infrastructure.Services;
+using OrderOps.Infrastructure.Workers;
 
 namespace OrderOps.Infrastructure;
 
@@ -39,6 +41,10 @@ public static class DependencyInjection
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IStatsService, StatsService>();
         services.AddScoped<IAnomalyService, AnomalyService>();
+
+        services.AddSingleton<IBulkJobQueue, BulkJobQueue>();
+        services.AddScoped<IBulkJobService, BulkJobService>();
+        services.AddHostedService<BulkJobBackgroundService>();
 
         return services;
     }
