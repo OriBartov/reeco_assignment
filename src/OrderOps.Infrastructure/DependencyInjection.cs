@@ -5,6 +5,7 @@ using OrderOps.Infrastructure.Bulk;
 using OrderOps.Infrastructure.Caching;
 using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Import;
+using OrderOps.Infrastructure.Realtime;
 using OrderOps.Infrastructure.Services;
 using OrderOps.Infrastructure.Workers;
 using StackExchange.Redis;
@@ -49,6 +50,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IBulkJobQueue, BulkJobQueue>();
         services.AddScoped<IBulkJobService, BulkJobService>();
+        services.AddSingleton<EventHub>();
+        services.AddSingleton<IEventPublisher, EventPublisher>();
         services.AddHostedService<BulkJobBackgroundService>();
 
         return services;
