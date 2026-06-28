@@ -1,0 +1,44 @@
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius);
+  background: var(--color-danger-bg);
+  color: #991b1b;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.message {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.retryButton {
+  flex-shrink: 0;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: #991b1b;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.retryButton:hover {
+  background: #fff;
+}
