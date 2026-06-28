@@ -1,6 +1,6 @@
 # OrderOps — System Architecture
 
-Procurement order-management backend for the Reeco take-home assignment. This document describes the **target architecture** for Part 1 (README sections 1.1–1.7), what is **implemented today**, and the **reasoning** behind each major decision.
+Procurement order-management system for the Reeco take-home assignment. This document describes the architecture for Part 1 (README sections 1.1–1.7), the **OrderOps.Web** React SPA (Part 2), what is **implemented today**, and the **reasoning** behind each major decision.
 
 **Spec authority:** when README and automated tests disagree, **tests win** (`tests/*.test.ts`, `tests/expected-values.json`).
 
@@ -10,11 +10,11 @@ Procurement order-management backend for the Reeco take-home assignment. This do
 
 | Goal | Implication |
 |------|-------------|
-| Correctness under concurrency | Optimistic locking on orders; Redis locks for overlapping bulk work (planned) |
-| Query performance at ~50k orders | PostgreSQL indexes, selective joins, optional Redis cache for stats (planned) |
+| Correctness under concurrency | Optimistic locking on orders; Redis locks for overlapping bulk work |
+| Query performance at ~50k orders | PostgreSQL indexes, selective joins, Redis-backed stats cache |
 | Runnable MVP in one command | Docker Compose: Postgres + Redis + single API container on port **3000** |
 | Verifiable incrementally | External Vitest suite drives implementation order (basic → filter → agg → …) |
-| Backend-only Part 1 | JSON REST + SSE; no React frontend in this phase |
+| API-first delivery | JSON REST + SSE on port **3000**; separate React SPA for Part 2 UI |
 
 The system is a **monolithic API process** for assignment scope. Internal boundaries (service interfaces, DTOs, planned workers) allow bulk processing, caching, and pub/sub to grow without changing the HTTP contract.
 
@@ -26,7 +26,7 @@ The system is a **monolithic API process** for assignment scope. Internal bounda
 flowchart TB
   subgraph clients [Clients]
     Tests["Vitest suite (tests/)"]
-    FutureUI["React UI (Part 2)"]
+    Web["OrderOps.Web SPA :5173 dev"]
   end
 
   subgraph docker [Docker Compose]
@@ -36,7 +36,8 @@ flowchart TB
   end
 
   Tests -->|HTTP JSON / SSE| API
-  FutureUI -.->|planned| API
+  Web -->|"fetch /api (Vite proxy dev)"| API
+  Web -->|"EventSource /api/events"| API
   API --> PG
   API --> Redis
 
@@ -45,9 +46,9 @@ flowchart TB
     Middleware["Exception + 404 middleware"]
     Services["Application services"]
     EF["EF Core 8 + Npgsql"]
-    Worker["BulkJobBackgroundService (planned)"]
+    Worker["BulkJobBackgroundService"]
     SSE["GET /api/events SSE (planned)"]
-    EventBus["Redis pub/sub EventBus (planned)"]
+    EventBus["Redis pub/sub (planned for SSE scale-out)"]
   end
 
   Controllers --> Middleware
@@ -64,8 +65,11 @@ flowchart TB
 |-----------|--------|
 | API ↔ PostgreSQL | Implemented |
 | CRUD, filtering, CSV import | Implemented (1.1, 1.2) |
-| Redis in application code | Not wired yet (container provisioned) |
-| Bulk worker, SSE, stats, anomalies | Planned (1.3–1.7) |
+| Stats, supplier performance, anomalies | Implemented (1.3, 1.4) |
+| Bulk jobs + background worker | Implemented (1.5) |
+| Redis locks + stats cache | Implemented when Redis configured (1.6) |
+| SSE `/api/events` | Planned (1.7); frontend client wired |
+| OrderOps.Web React SPA | Implemented (Part 2) |
 
 ---
 
@@ -74,8 +78,18 @@ flowchart TB
 ```
 src/
 ├── OrderOps.Api/                 # HTTP host — controllers, middleware, model binding
-├── OrderOps.Infrastructure/      # EF Core, import, services, workers (planned)
-└── OrderOps.Import/              # CLI for manual CSV import
+├── OrderOps.Infrastructure/      # EF Core, import, services, bulk worker, caching
+├── OrderOps.Import/              # CLI for manual CSV import
+└── OrderOps.Web/                 # Vite + React 18 + TypeScript SPA (Part 2)
+    ├── vite.config.ts            # dev proxy /api → http://localhost:3000
+    └── src/
+        ├── api/                  # typed fetch layer (orders, suppliers, jobs, events)
+        ├── types/                # DTOs — snake_case to match API JSON
+        ├── routes/               # react-router-dom v6
+        ├── pages/                # Orders, Dashboard, Supplier detail
+        ├── components/           # table, filters, charts, bulk modals, layout
+        ├── hooks/                # React Query + SSE invalidation
+        └── lib/                  # formatters, query-string builders
 ```
 
 ### Why Api + Infrastructure?
@@ -207,11 +221,11 @@ This is a **pragmatic layered monolith**: one deployable unit, clear dependency 
 
 **Why:** Concurrent PATCH tests require exactly one winner without row-level read locks on the hot path.
 
-**Planned:** Publish `order_updated` SSE event after successful PATCH.
+**Planned:** Publish `order_updated` SSE event after successful PATCH (section 1.7).
 
 ---
 
-### 4.10 Redis (planned — container ready)
+### 4.10 Redis
 
 | Use | Mechanism | Rationale |
 |-----|-----------|-----------|
@@ -233,11 +247,11 @@ We still plan Redis pub/sub for **future expansion**:
 
 Using pub/sub from the start keeps publishers (order update, bulk completion) decoupled from SSE connection management and avoids a redesign when horizontal scaling is added. It also reuses Redis already provisioned in Compose for locks and stats cache.
 
-**Current state:** `docker-compose.yml` runs Redis with healthchecks; application registration not yet in `DependencyInjection.cs`.
+**Current state:** `DependencyInjection.cs` registers `IConnectionMultiplexer`, `IBulkOrderLockService`, and `IStatsCache` when a Redis connection string is configured; falls back to in-memory implementations for local dev without Redis.
 
 ---
 
-### 4.11 Bulk operations (planned)
+### 4.11 Bulk operations
 
 **Decision:** HTTP **202** in &lt;500ms; `jobs` row + `Channel<BulkJobMessage>` + `BulkJobBackgroundService`; poll `GET /api/jobs/:id`.
 
@@ -245,9 +259,11 @@ Using pub/sub from the start keeps publishers (order update, bulk completion) de
 
 **Actions:** `approve`, `reject`, `flag` (append to notes, idempotent).
 
+**Status:** Implemented — `BulkJobBackgroundService` processes jobs from `IBulkJobQueue`; clients poll `GET /api/jobs/:id`.
+
 ---
 
-### 4.12 Real-time: SSE (planned)
+### 4.12 Real-time: SSE (planned — endpoint not yet exposed)
 
 **Decision:** `GET /api/events?supplier_id=optional` — native SSE, not SignalR.
 
@@ -306,6 +322,21 @@ cd src/OrderOps.Api && dotnet run
 cd tests && npm test
 ```
 
+### Local dev (full stack — API + SPA)
+
+Two terminals; the Vitest suite still targets the API on `:3000` only.
+
+```bash
+# Terminal 1 — infrastructure + API
+docker-compose up -d
+cd src/OrderOps.Api && dotnet run    # http://localhost:3000
+
+# Terminal 2 — frontend (Vite dev server proxies /api → :3000)
+cd src/OrderOps.Web && npm install && npm run dev   # http://localhost:5173
+```
+
+The SPA uses a relative `/api` base URL. Vite's dev proxy avoids CORS for local development. Production static hosting of `OrderOps.Web/dist` requires either the same-origin integrated SPA in the API container (`wwwroot`) or a narrow CORS policy on the API for the static host origin.
+
 ---
 
 ## 6. Implementation status
@@ -314,11 +345,12 @@ cd tests && npm test
 |---------|------------|--------|
 | 1.1 | CRUD, PATCH concurrency | Done |
 | 1.2 | Filters, sort, search | Done |
-| 1.3 | Stats, supplier performance | Planned |
-| 1.4 | Anomalies | Planned |
-| 1.5 | Bulk jobs | Planned |
-| 1.6 | Redis locks, read consistency | Planned |
+| 1.3 | Stats, supplier performance | Done |
+| 1.4 | Anomalies | Done |
+| 1.5 | Bulk jobs | Done |
+| 1.6 | Redis locks, stats cache | Done (Redis or in-memory fallback) |
 | 1.7 | SSE events | Planned |
+| Part 2 | OrderOps.Web React SPA | Done |
 
 ---
 
@@ -346,11 +378,203 @@ cd tests && npm test
 | Import | `src/OrderOps.Infrastructure/Import/CsvImporter.cs` |
 | DI | `src/OrderOps.Infrastructure/DependencyInjection.cs` |
 | Status constants | `src/OrderOps.Infrastructure/Common/OrderStatuses.cs` |
-| Planned workers | `src/OrderOps.Infrastructure/Workers/` |
-| Planned realtime | `src/OrderOps.Infrastructure/Realtime/` |
+| Bulk worker | `src/OrderOps.Infrastructure/Workers/BulkJobBackgroundService.cs` |
+| Bulk queue / locks | `src/OrderOps.Infrastructure/Bulk/` |
+| Stats cache | `src/OrderOps.Infrastructure/Caching/` |
+| Frontend host | `src/OrderOps.Web/vite.config.ts` |
+| Frontend routes | `src/OrderOps.Web/src/routes/index.tsx` |
+| Frontend API client | `src/OrderOps.Web/src/api/` |
+| Frontend hooks | `src/OrderOps.Web/src/hooks/` |
+| Frontend pages | `src/OrderOps.Web/src/pages/` |
 
 ---
 
-## 9. Summary
+## 9. Frontend architecture
 
-OrderOps is a **layered ASP.NET Core 8 monolith**: PostgreSQL for relational data, Redis staged for bulk locks, stats cache, and (for scale-out) event pub/sub. The API exposes **snake_case JSON REST** on port 3000, seeds from CSV with full data fidelity, and uses **index-aware EF queries** for list endpoints. **Optimistic locking** handles concurrent PATCH; **Redis SET NX** (planned) handles bulk overlap across overlapping jobs. **Fast 202 + background worker** (planned) and **SSE** (planned) complete the async and real-time story; Redis pub/sub is chosen for forward-compatible event fan-out, not because a single Kestrel process requires it.
+### 9.1 Separation rationale
+
+**OrderOps.Web** is a **separate SPA**, not embedded in the API build for day-to-day development.
+
+| Factor | Separate SPA | Integrated SPA (API serves `dist/`) |
+|--------|--------------|-------------------------------------|
+| Automated tests (115 pts) | API on `:3000` unchanged; zero risk to test pipeline | Dockerfile/build changes; SPA fallback must not intercept `/api/*` |
+| Part 1 vs Part 2 boundary | API remains a standalone product; Swagger at `:3000` | UI and API share deploy artifact |
+| Dev experience | Vite HMR + proxy is fast | Rebuild/restart API to see UI changes |
+
+The API `Program.cs` optionally serves a pre-built SPA from `wwwroot` when present (Docker image path); local Part 2 development uses the Vite dev server on port **5173** with a proxy to **3000**.
+
+### 9.2 Tech stack
+
+| Layer | Choice | Role |
+|-------|--------|------|
+| Build | Vite 8 | Fast dev server, HMR, production bundle |
+| UI | React 19 + TypeScript | Component model, typed props and DTOs |
+| Routing | react-router-dom v7 | Three routes under `AppLayout` |
+| Server state | TanStack Query v5 | Caching, loading/error, invalidation on SSE |
+| Charts | recharts | Dashboard and supplier performance charts |
+| Styling | CSS modules | Scoped styles; no heavy UI kit |
+
+### 9.3 Route map
+
+```mermaid
+flowchart LR
+  subgraph routes [React Router]
+    Orders["/  OrdersPage"]
+    Dashboard["/dashboard  DashboardPage"]
+    Supplier["/suppliers/:id  SupplierDetailPage"]
+  end
+
+  Orders -->|supplier link| Supplier
+  Dashboard -->|top supplier click| Supplier
+```
+
+| Route | View | Primary data |
+|-------|------|--------------|
+| `/` | Orders table | `GET /api/orders` with URL-synced filters, sort, pagination |
+| `/dashboard` | Analytics dashboard | `GET /api/orders/stats` |
+| `/suppliers/:id` | Supplier detail | `GET /api/suppliers/:id`, `…/performance`, filtered orders |
+
+### 9.4 Layered design
+
+```mermaid
+flowchart TB
+  subgraph presentation [Presentation Layer]
+    Pages["Pages: Orders, Dashboard, Supplier"]
+    Components["Components: Table, Filters, Charts, BulkBar, Modals"]
+    Layout["AppLayout + Nav"]
+  end
+
+  subgraph hooks [Hooks Layer]
+    useOrdersQuery["useOrdersQuery"]
+    useStatsQuery["useStatsQuery"]
+    useSupplierQueries["useSupplier + usePerformance"]
+    useBulkJob["useBulkJobQuery"]
+    useEventStream["useEventStream"]
+  end
+
+  subgraph apiClient [API Client Layer]
+    client["apiClient fetch wrapper"]
+    ordersApi["orders.ts"]
+    suppliersApi["suppliers.ts"]
+    jobsApi["jobs.ts"]
+    eventsApi["events.ts EventSource"]
+  end
+
+  subgraph backend [OrderOps.Api :3000]
+    REST["/api/* REST"]
+    SSE["/api/events SSE"]
+  end
+
+  Pages --> Components
+  Pages --> hooks
+  hooks --> apiClient
+  apiClient --> REST
+  eventsApi --> SSE
+  useEventStream -->|"invalidate queries"| hooks
+```
+
+**Key patterns:**
+
+- **URL as source of truth for filters** — `useOrderListParams` syncs filter state to `searchParams` so refresh and share preserve the orders view.
+- **Typed errors** — `ApiClientError` parses `{ error, code }` from non-2xx responses; 409 on PATCH triggers optimistic rollback.
+- **No global Redux** — React Query plus local UI state (row selection, modal open) is sufficient.
+- **Snake_case types** — TypeScript interfaces match API JSON (`supplier_id`, `total_price`, etc.) without mapping boilerplate.
+
+### 9.5 Data-fetching and realtime
+
+| Hook | Query key / interval | Invalidation |
+|------|---------------------|--------------|
+| `useOrdersQuery` | `['orders', query]` | SSE `order_updated`, `bulk_completed`; manual after PATCH |
+| `useStatsQuery` | `['stats']` | SSE `bulk_completed` |
+| `useBulkJobQuery` | `['jobs', jobId]` — poll every **1s** until terminal | SSE `bulk_completed` |
+| `useEventStream` | N/A (long-lived `EventSource`) | Invalidates orders + stats on relevant events |
+
+`AppLayout` opens a global SSE connection; on the supplier detail route it passes `?supplier_id=` so server-side filtering can scope events when the endpoint is live.
+
+Reference implementations for API contracts: `tests/helpers/api.ts` (fetch wrapper), `tests/helpers/events-client.ts` (SSE parsing).
+
+### 9.6 View responsibilities and UX states
+
+**Orders (`/`):** Filter bar (status, priority, supplier, warehouse, date range, search), sortable paginated table, inline status PATCH with 409 handling, multi-select bulk bar → confirm modal → `POST /api/orders/bulk-action` → progress modal with job polling. States: skeleton rows (loading), error banner with retry, empty "No orders match filters".
+
+**Dashboard (`/dashboard`):** Summary cards (`total_orders`, `total_revenue`, `avg_order_value`); charts for status distribution, monthly volume trend, top suppliers. States: chart skeletons, error card.
+
+**Supplier detail (`/suppliers/:id`):** Header (name, rating, country, aggregates), performance metrics + monthly trend chart, paginated order history. 404 → dedicated not-found state.
+
+**Bulk completion:** Progress modal shows `completed` / `failed` / `total` from `GET /api/jobs/:id`; selection clears on terminal status; SSE provides eventual consistency across tabs.
+
+**Security (assignment scope):** Order `notes` rendered as plain text only — no `dangerouslySetInnerHTML`.
+
+---
+
+## 10. Low-level design (full stack)
+
+```mermaid
+flowchart TB
+  subgraph browser [Browser]
+    subgraph spa [OrderOps.Web — Vite SPA :5173 dev]
+      Router[React Router]
+      RQ[TanStack Query Cache]
+      ES[EventSource Client]
+      Router --> RQ
+      ES -->|"invalidate on events"| RQ
+    end
+  end
+
+  subgraph server [OrderOps.Api — Kestrel :3000]
+    CORS[CORS / same-origin via proxy]
+    Ctrl[Controllers /api/*]
+    EvEp[EventsEndpoint SSE]
+    MW[Exception + 404 Middleware]
+    Svc[OrderService / BulkJobService / Stats]
+    Worker[BulkJobBackgroundService]
+    Pub[IEventPublisher]
+    CORS --> MW --> Ctrl
+    CORS --> EvEp
+    Ctrl --> Svc
+    Worker --> Svc
+    Svc --> Pub
+    Pub --> EvEp
+  end
+
+  subgraph data [Data Layer]
+    PG[(PostgreSQL)]
+    Redis[(Redis)]
+  end
+
+  RQ -->|"fetch JSON"| CORS
+  ES -->|"text/event-stream"| EvEp
+  Svc --> PG
+  Worker --> Redis
+  Pub --> Redis
+```
+
+`EventsEndpoint`, `IEventPublisher`, and Redis pub/sub fan-out are **planned** for section 1.7; the diagram shows the target wiring. Today the frontend `useEventStream` hook is ready and will invalidate React Query caches once `/api/events` is live.
+
+### Bulk action sequence
+
+```mermaid
+sequenceDiagram
+  participant UI as BulkActionModal
+  participant API as OrderOps.Api
+  participant Worker as BulkJobBackgroundService
+  participant SSE as /api/events
+
+  UI->>API: POST /api/orders/bulk-action
+  API-->>UI: 202 jobId
+  loop every 1s until completed
+    UI->>API: GET /api/jobs/:id
+    API-->>UI: progress total/completed/failed
+  end
+  Worker->>SSE: bulk_completed
+  SSE-->>UI: invalidate orders query
+  UI->>UI: show summary failed count + clear selection
+```
+
+HTTP **202** returns within the test budget; the UI polls job status at 1-second intervals until `completed` or `failed`, then displays a summary. When SSE is available, polling and push complement each other — polling drives the progress bar; SSE refreshes list and stats for other clients and tabs.
+
+---
+
+## 11. Summary
+
+OrderOps is a **full-stack procurement system**: a **layered ASP.NET Core 8 monolith** on port **3000** plus a **separate React SPA** (`OrderOps.Web`) for Part 2. PostgreSQL holds relational data; Redis provides bulk locks and stats caching (with in-memory fallbacks). The API exposes **snake_case JSON REST**, seeds from CSV with full data fidelity, and uses **index-aware EF queries** for list endpoints. **Optimistic locking** handles concurrent PATCH; **Redis SET NX** prevents bulk overlap across jobs. **Fast 202 + `BulkJobBackgroundService`** handles async bulk work; **SSE** (`GET /api/events`) completes the real-time story once wired. The frontend uses **TanStack Query**, **URL-synced filters**, job polling, and an **EventSource** client prepared for SSE invalidation — runnable in two terminals without affecting the API-only Vitest suite.
