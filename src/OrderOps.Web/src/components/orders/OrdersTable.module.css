@@ -38,6 +38,26 @@
   background: #f8fafc;
 }
 
+.selectedRow {
+  background: var(--color-accent-subtle);
+}
+
+.selectedRow:hover {
+  background: #dbeafe;
+}
+
+.selectCol {
+  width: 2.75rem;
+  padding-right: 0.5rem !important;
+}
+
+.checkbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
 .sortButton {
   display: inline-flex;
   align-items: center;

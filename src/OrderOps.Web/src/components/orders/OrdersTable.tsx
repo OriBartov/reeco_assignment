@@ -20,10 +20,13 @@ export interface OrdersTableProps {
   sortOrder: 'asc' | 'desc';
   query: OrderListQuery;
   supplierNames: Map<string, string>;
+  selectedIds: Set<string>;
   isLoading?: boolean;
   onSort: (column: SortableOrderColumn) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  onToggleRow: (id: string) => void;
+  onTogglePage: (checked: boolean) => void;
 }
 
 function SortHeader({
@@ -61,7 +64,7 @@ function SkeletonRows({ count }: { count: number }) {
     <>
       {Array.from({ length: count }, (_, i) => (
         <tr key={i} className={styles.skeletonRow}>
-          {Array.from({ length: 9 }, (_, j) => (
+          {Array.from({ length: 10 }, (_, j) => (
             <td key={j}>
               <span className={styles.skeleton} />
             </td>
@@ -139,14 +142,21 @@ export function OrdersTable({
   sortOrder,
   query,
   supplierNames,
+  selectedIds,
   isLoading,
   onSort,
   onPageChange,
   onPageSizeChange,
+  onToggleRow,
+  onTogglePage,
 }: OrdersTableProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
+  const pageOrderIds = orders.map((order) => order.id);
+  const selectedOnPageCount = pageOrderIds.filter((id) => selectedIds.has(id)).length;
+  const allOnPageSelected = pageOrderIds.length > 0 && selectedOnPageCount === pageOrderIds.length;
+  const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
 
   return (
     <>
@@ -154,6 +164,21 @@ export function OrdersTable({
         <table className={styles.table}>
           <thead>
             <tr>
+              <th scope="col" className={styles.selectCol}>
+                <input
+                  type="checkbox"
+                  className={styles.checkbox}
+                  checked={allOnPageSelected}
+                  ref={(input) => {
+                    if (input) {
+                      input.indeterminate = someOnPageSelected;
+                    }
+                  }}
+                  disabled={isLoading || pageOrderIds.length === 0}
+                  aria-label="Select all orders on this page"
+                  onChange={(event) => onTogglePage(event.target.checked)}
+                />
+              </th>
               <th scope="col">ID</th>
               <th scope="col">Supplier</th>
               <th scope="col">Product</th>
@@ -218,7 +243,16 @@ export function OrdersTable({
               <SkeletonRows count={pageSize} />
             ) : (
               orders.map((order) => (
-                <tr key={order.id}>
+                <tr key={order.id} className={selectedIds.has(order.id) ? styles.selectedRow : ''}>
+                  <td className={styles.selectCol}>
+                    <input
+                      type="checkbox"
+                      className={styles.checkbox}
+                      checked={selectedIds.has(order.id)}
+                      aria-label={`Select order ${order.id}`}
+                      onChange={() => onToggleRow(order.id)}
+                    />
+                  </td>
                   <td className={styles.mono}>{order.id}</td>
                   <td>
                     <Link to={`/suppliers/${order.supplier_id}`}>
