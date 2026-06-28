@@ -163,6 +163,8 @@ public sealed class OrderService(AppDbContext db, IStatsCache statsCache) : IOrd
             await statsCache.InvalidateStatsAsync(cancellationToken);
         }
 
+        await statsCache.InvalidateSupplierPerformanceAsync(order.SupplierId, cancellationToken);
+
         return await GetByIdAsync(id, cancellationToken);
     }
 

@@ -16,3 +16,12 @@ public sealed record OrderStatsDto(
     IReadOnlyList<MonthAggregateDto> ByMonth,
     IReadOnlyList<TopSupplierDto> TopSuppliers,
     IReadOnlyList<WarehouseAggregateDto> ByWarehouse);
+
+public sealed record SupplierMonthlyTrendDto(string Month, int OrderCount);
+
+public sealed record SupplierPerformanceDto(
+    decimal AvgDeliveryDays,
+    decimal RejectionRate,
+    decimal AvgOrderValue,
+    IReadOnlyList<SupplierMonthlyTrendDto> MonthlyTrend,
+    decimal PriceConsistency);

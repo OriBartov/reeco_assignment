@@ -22,6 +22,15 @@ public sealed class SuppliersController(ISupplierService supplierService) : Cont
         return Ok(new PagedResponse<SupplierListItemDto>(result.Data, result.Total, result.Limit, result.Offset));
     }
 
+    [HttpGet("{id}/performance")]
+    public async Task<ActionResult<SupplierPerformanceDto>> GetPerformance(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var performance = await supplierService.GetPerformanceAsync(id, cancellationToken);
+        return Ok(performance);
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<SupplierDetailDto>> GetById(string id, CancellationToken cancellationToken = default)
     {
