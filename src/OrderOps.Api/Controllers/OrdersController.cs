@@ -1,23 +1,37 @@
 using Microsoft.AspNetCore.Mvc;
 using OrderOps.Api.Models;
+using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Services;
 
 namespace OrderOps.Api.Controllers;
 
 [ApiController]
 [Route("api/orders")]
-public sealed class OrdersController(IOrderService orderService) : ControllerBase
+public sealed class OrdersController(
+    IOrderService orderService,
+    IStatsService statsService,
+    IAnomalyService anomalyService) : ControllerBase
 {
+    [HttpGet("stats")]
+    public async Task<ActionResult<OrderStatsDto>> GetStats(CancellationToken cancellationToken = default)
+    {
+        var stats = await statsService.GetOrderStatsAsync(cancellationToken);
+        return Ok(stats);
+    }
+
+    [HttpGet("anomalies")]
+    public async Task<ActionResult<AnomaliesListDto>> GetAnomalies(CancellationToken cancellationToken = default)
+    {
+        var anomalies = await anomalyService.GetAnomaliesAsync(cancellationToken);
+        return Ok(new AnomaliesListDto(anomalies));
+    }
+
     [HttpGet]
     public async Task<ActionResult<PagedResponse<OrderListItemDto>>> List(
-        [FromQuery] int limit = 20,
-        [FromQuery] int offset = 0,
+        [FromQuery] OrderListQuery query,
         CancellationToken cancellationToken = default)
     {
-        limit = Math.Clamp(limit, 1, 1000);
-        offset = Math.Max(offset, 0);
-
-        var result = await orderService.ListAsync(limit, offset, cancellationToken);
+        var result = await orderService.ListAsync(query.Normalize(), cancellationToken);
         return Ok(new PagedResponse<OrderListItemDto>(result.Data, result.Total, result.Limit, result.Offset));
     }
 

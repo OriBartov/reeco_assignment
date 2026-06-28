@@ -1,4 +1,4 @@
-namespace OrderOps.Infrastructure.Services;
+namespace OrderOps.Infrastructure.Dtos;
 
 public sealed record SupplierListItemDto(
     string Id,

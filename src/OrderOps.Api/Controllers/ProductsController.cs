@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OrderOps.Api.Models;
+using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Services;
 
 namespace OrderOps.Api.Controllers;

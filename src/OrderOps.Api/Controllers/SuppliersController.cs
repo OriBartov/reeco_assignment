@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OrderOps.Api.Models;
+using OrderOps.Infrastructure.Dtos;
 using OrderOps.Infrastructure.Services;
 
 namespace OrderOps.Api.Controllers;
@@ -19,6 +20,15 @@ public sealed class SuppliersController(ISupplierService supplierService) : Cont
 
         var result = await supplierService.ListAsync(limit, offset, cancellationToken);
         return Ok(new PagedResponse<SupplierListItemDto>(result.Data, result.Total, result.Limit, result.Offset));
+    }
+
+    [HttpGet("{id}/performance")]
+    public async Task<ActionResult<SupplierPerformanceDto>> GetPerformance(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var performance = await supplierService.GetPerformanceAsync(id, cancellationToken);
+        return Ok(performance);
     }
 
     [HttpGet("{id}")]
