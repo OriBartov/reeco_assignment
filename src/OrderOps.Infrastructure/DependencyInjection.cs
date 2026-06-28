@@ -7,6 +7,7 @@ using OrderOps.Infrastructure.Data;
 using OrderOps.Infrastructure.Import;
 using OrderOps.Infrastructure.Services;
 using OrderOps.Infrastructure.Workers;
+using StackExchange.Redis;
 
 namespace OrderOps.Infrastructure;
 
@@ -20,14 +21,18 @@ public static class DependencyInjection
         var redisConnection = configuration[$"{RedisOptions.SectionName}:ConnectionString"];
         if (!string.IsNullOrWhiteSpace(redisConnection))
         {
+            services.AddSingleton<IConnectionMultiplexer>(_ =>
+                ConnectionMultiplexer.Connect(redisConnection));
             services.AddStackExchangeRedisCache(options =>
             {
                 options.Configuration = redisConnection;
             });
+            services.AddSingleton<IBulkOrderLockService, RedisBulkOrderLockService>();
         }
         else
         {
             services.AddDistributedMemoryCache();
+            services.AddSingleton<IBulkOrderLockService, InMemoryBulkOrderLockService>();
         }
 
         services.AddSingleton<IStatsCache, StatsCache>();

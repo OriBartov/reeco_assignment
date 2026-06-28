@@ -11,6 +11,7 @@ namespace OrderOps.Infrastructure.Workers;
 
 public sealed class BulkJobBackgroundService(
     IBulkJobQueue queue,
+    IBulkOrderLockService orderLockService,
     IServiceScopeFactory scopeFactory,
     ILogger<BulkJobBackgroundService> logger) : BackgroundService
 {
@@ -49,6 +50,7 @@ public sealed class BulkJobBackgroundService(
 
             var (batchCompleted, batchFailed) = await ProcessBatchAsync(
                 db,
+                orderLockService,
                 batch,
                 message.Action,
                 message.Reason,
@@ -85,6 +87,7 @@ public sealed class BulkJobBackgroundService(
 
     private static async Task<(int Completed, int Failed)> ProcessBatchAsync(
         AppDbContext db,
+        IBulkOrderLockService orderLockService,
         IReadOnlyList<string> orderIds,
         string action,
         string? reason,
@@ -98,46 +101,61 @@ public sealed class BulkJobBackgroundService(
 
         var found = orders.ToDictionary(o => o.Id);
         var notFoundCount = orderIds.Count(id => !found.ContainsKey(id));
-        var processableIds = orders
+        var lockCandidates = orders
             .Where(o => o.Status != OrderStatuses.Cancelled)
             .Select(o => o.Id)
             .ToList();
         var cancelledCount = orders.Count(o => o.Status == OrderStatuses.Cancelled);
 
-        if (processableIds.Count > 0)
+        IReadOnlyList<string> acquired = [];
+        var lockFailedCount = 0;
+
+        if (lockCandidates.Count > 0)
         {
-            switch (action)
+            (acquired, lockFailedCount) = await orderLockService.TryAcquireAsync(lockCandidates, cancellationToken);
+
+            try
             {
-                case BulkActions.Approve:
-                    await db.Orders
-                        .Where(o => processableIds.Contains(o.Id))
-                        .ExecuteUpdateAsync(
-                            setters => setters
-                                .SetProperty(o => o.Status, OrderStatuses.Approved)
-                                .SetProperty(o => o.UpdatedAt, DateTime.UtcNow)
-                                .SetProperty(o => o.Version, o => o.Version + 1),
-                            cancellationToken);
-                    break;
+                if (acquired.Count > 0)
+                {
+                    switch (action)
+                    {
+                        case BulkActions.Approve:
+                            await db.Orders
+                                .Where(o => acquired.Contains(o.Id))
+                                .ExecuteUpdateAsync(
+                                    setters => setters
+                                        .SetProperty(o => o.Status, OrderStatuses.Approved)
+                                        .SetProperty(o => o.UpdatedAt, DateTime.UtcNow)
+                                        .SetProperty(o => o.Version, o => o.Version + 1),
+                                    cancellationToken);
+                            break;
 
-                case BulkActions.Reject:
-                    await db.Orders
-                        .Where(o => processableIds.Contains(o.Id))
-                        .ExecuteUpdateAsync(
-                            setters => setters
-                                .SetProperty(o => o.Status, OrderStatuses.Rejected)
-                                .SetProperty(o => o.UpdatedAt, DateTime.UtcNow)
-                                .SetProperty(o => o.Version, o => o.Version + 1),
-                            cancellationToken);
-                    break;
+                        case BulkActions.Reject:
+                            await db.Orders
+                                .Where(o => acquired.Contains(o.Id))
+                                .ExecuteUpdateAsync(
+                                    setters => setters
+                                        .SetProperty(o => o.Status, OrderStatuses.Rejected)
+                                        .SetProperty(o => o.UpdatedAt, DateTime.UtcNow)
+                                        .SetProperty(o => o.Version, o => o.Version + 1),
+                                    cancellationToken);
+                            break;
 
-                case BulkActions.Flag:
-                    await ApplyFlagAsync(db, processableIds, reason, cancellationToken);
-                    break;
+                        case BulkActions.Flag:
+                            await ApplyFlagAsync(db, acquired, reason, cancellationToken);
+                            break;
+                    }
+                }
+            }
+            finally
+            {
+                await orderLockService.ReleaseAsync(acquired, cancellationToken);
             }
         }
 
-        var failed = notFoundCount + cancelledCount;
-        var completed = processableIds.Count;
+        var failed = notFoundCount + cancelledCount + lockFailedCount;
+        var completed = acquired.Count;
         return (completed, failed);
     }
 
