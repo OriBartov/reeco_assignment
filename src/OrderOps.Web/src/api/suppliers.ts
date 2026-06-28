@@ -12,10 +12,10 @@ export function listSuppliers(query: SupplierListQuery = {}, options?: ApiReques
   return apiGet<PaginatedResponse<SupplierListItem>>(`/suppliers${buildQueryString(query)}`, options);
 }
 
-export function getSupplier(id: string) {
-  return apiGet<SupplierDetail>(`/suppliers/${encodeURIComponent(id)}`);
+export function getSupplier(id: string, options?: ApiRequestOptions) {
+  return apiGet<SupplierDetail>(`/suppliers/${encodeURIComponent(id)}`, options);
 }
 
-export function getSupplierPerformance(id: string) {
-  return apiGet<SupplierPerformance>(`/suppliers/${encodeURIComponent(id)}/performance`);
+export function getSupplierPerformance(id: string, options?: ApiRequestOptions) {
+  return apiGet<SupplierPerformance>(`/suppliers/${encodeURIComponent(id)}/performance`, options);
 }

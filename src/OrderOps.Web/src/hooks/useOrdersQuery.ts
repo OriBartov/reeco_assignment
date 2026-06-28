@@ -6,9 +6,10 @@ export function ordersQueryKey(query: OrderListQuery) {
   return ['orders', query] as const;
 }
 
-export function useOrdersQuery(query: OrderListQuery) {
+export function useOrdersQuery(query: OrderListQuery, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ordersQueryKey(query),
     queryFn: ({ signal }) => listOrders(query, { signal }),
+    enabled: options?.enabled ?? true,
   });
 }
