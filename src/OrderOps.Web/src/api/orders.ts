@@ -24,8 +24,8 @@ export function updateOrder(id: string, body: UpdateOrderRequest) {
   return apiPatch<OrderDetail>(`/orders/${encodeURIComponent(id)}`, body);
 }
 
-export function getOrderStats() {
-  return apiGet<OrderStats>('/orders/stats');
+export function getOrderStats(options?: ApiRequestOptions) {
+  return apiGet<OrderStats>('/orders/stats', options);
 }
 
 export function getOrderAnomalies() {
