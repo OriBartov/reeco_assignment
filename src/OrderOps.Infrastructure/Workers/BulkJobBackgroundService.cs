@@ -120,13 +120,15 @@ public sealed class BulkJobBackgroundService(
 
             try
             {
+                var completed = 0;
+
                 if (acquired.Count > 0)
                 {
                     switch (action)
                     {
                         case BulkActions.Approve:
-                            await db.Orders
-                                .Where(o => acquired.Contains(o.Id))
+                            completed = await db.Orders
+                                .Where(o => acquired.Contains(o.Id) && o.Status != OrderStatuses.Cancelled)
                                 .ExecuteUpdateAsync(
                                     setters => setters
                                         .SetProperty(o => o.Status, OrderStatuses.Approved)
@@ -136,8 +138,8 @@ public sealed class BulkJobBackgroundService(
                             break;
 
                         case BulkActions.Reject:
-                            await db.Orders
-                                .Where(o => acquired.Contains(o.Id))
+                            completed = await db.Orders
+                                .Where(o => acquired.Contains(o.Id) && o.Status != OrderStatuses.Cancelled)
                                 .ExecuteUpdateAsync(
                                     setters => setters
                                         .SetProperty(o => o.Status, OrderStatuses.Rejected)
@@ -147,10 +149,13 @@ public sealed class BulkJobBackgroundService(
                             break;
 
                         case BulkActions.Flag:
-                            await ApplyFlagAsync(db, acquired, reason, cancellationToken);
+                            completed = await ApplyFlagAsync(db, acquired, reason, cancellationToken);
                             break;
                     }
                 }
+
+                var failed = notFoundCount + cancelledCount + lockFailedCount + (acquired.Count - completed);
+                return (completed, failed);
             }
             finally
             {
@@ -158,12 +163,10 @@ public sealed class BulkJobBackgroundService(
             }
         }
 
-        var failed = notFoundCount + cancelledCount + lockFailedCount;
-        var completed = acquired.Count;
-        return (completed, failed);
+        return (0, notFoundCount + cancelledCount + lockFailedCount);
     }
 
-    private static async Task ApplyFlagAsync(
+    private static async Task<int> ApplyFlagAsync(
         AppDbContext db,
         IReadOnlyList<string> orderIds,
         string? reason,
@@ -171,7 +174,7 @@ public sealed class BulkJobBackgroundService(
     {
         var flagText = reason ?? "flagged";
         var orders = await db.Orders
-            .Where(o => orderIds.Contains(o.Id))
+            .Where(o => orderIds.Contains(o.Id) && o.Status != OrderStatuses.Cancelled)
             .ToListAsync(cancellationToken);
 
         var updated = false;
@@ -192,6 +195,8 @@ public sealed class BulkJobBackgroundService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+
+        return orders.Count;
     }
 
     private static async Task UpdateJobProgressAsync(
